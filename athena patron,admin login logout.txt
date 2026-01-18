@@ -1,0 +1,159 @@
+import sqlite3
+import random
+
+def create_tables():
+    conn = sqlite3.connect("athena.db")
+    cursor = conn.cursor()
+    
+    # Create athena_patron table (without created_at column)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS athena_patron (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        surname TEXT,
+        firstname TEXT,
+        dob TEXT,
+        phone TEXT,
+        patron_id TEXT UNIQUE,
+        password TEXT,
+        genre TEXT
+    );
+    """)
+    
+    # Create athena_admin table (without created_at column)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS athena_admin (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        surname TEXT,
+        firstname TEXT,
+        dob TEXT,
+        phone TEXT,
+        admin_id TEXT UNIQUE,
+        password TEXT
+    );
+    """)
+    
+    conn.commit()
+    conn.close()
+    print("Tables created successfully.")
+
+# Run the function
+create_tables()
+
+def generate_patron_id(surname, dob):
+    prefix = surname[:3].upper()
+    year, month, day = dob.split("-")
+    suffix = year[-2:] + month + day
+    return prefix + suffix
+
+def sign_up_patron(conn):
+    surname = input("Enter surname: ")
+    firstname = input("Enter first name: ")
+    dob = input("Enter DOB (YYYY-MM-DD): ")
+    phone = input("Enter phone number: ")
+    
+    password = input("Set your password: ")
+    confirm = input("Confirm your password: ")
+    if password != confirm:
+        print("Passwords do not match. Try again.")
+        return
+    
+    patron_id = generate_patron_id(surname, dob)
+    cursor = conn.cursor()
+    cursor.execute("""INSERT INTO athena_patron 
+        (surname, firstname, dob, phone, patron_id, password) 
+        VALUES (?, ?, ?, ?, ?, ?)""", 
+        (surname, firstname, dob, phone, patron_id, password))
+    conn.commit()
+    
+    print(f"Account successfully created. Your Card ID is {patron_id}")
+
+def generate_admin_id():
+    # Generate random 6-digit number, ensure uniqueness
+    return "ATH" + str(random.randint(100000, 999999))
+
+def sign_up_admin(conn):
+    surname = input("Enter surname: ")
+    firstname = input("Enter first name: ")
+    dob = input("Enter DOB (YYYY-MM-DD): ")
+    phone = input("Enter phone number: ")
+    
+    password = input("Set your password: ")
+    confirm = input("Confirm your password: ")
+    if password != confirm:
+        print("Passwords do not match. Try again.")
+        return
+    
+    admin_id = generate_admin_id()
+    cursor = conn.cursor()
+    cursor.execute("""INSERT INTO athena_admin 
+        (surname, firstname, dob, phone, admin_id, password) 
+        VALUES (?, ?, ?, ?, ?, ?)""", 
+        (surname, firstname, dob, phone, admin_id, password))
+    conn.commit()
+    
+    print(f"Account successfully created. Your Card ID is {admin_id}")
+
+def log_in_patron(conn):
+    patron_id = input("Enter Patron ID: ")
+    password = input("Enter Password: ")
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM athena_patron WHERE patron_id=? AND password=?", (patron_id, password))
+    result = cursor.fetchone()
+    if result:
+        print("Login successful as Patron!")
+        return result[0]
+    else:
+        print("Sorry! User does not exist. Please sign up.")
+        return None
+    
+def log_in_admin(conn):
+    admin_id = input("Enter Admin ID: ")
+    password = input("Enter Password: ")
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM athena_admin WHERE admin_id=? AND password=?", (admin_id, password))
+    result = cursor.fetchone()
+    if result:
+        print("Login successful as Admin!")
+        return result[0]
+    else:
+        print("Sorry! Admin does not exist. Please sign up.")
+        return None
+
+def main():
+    conn = sqlite3.connect("athena.db")
+    while True:
+        print("\n--- Main Menu ---")
+        print("1. Sign Up")
+        print("2. Log In")
+        choice = input("Choose: ")
+        
+        if choice == "1":
+            print("\nSign Up Options:")
+            print("1. Patron")
+            print("2. Admin")
+            sub_choice = input("Choose: ")
+            if sub_choice == "1":
+                sign_up_patron(conn)
+            elif sub_choice == "2":
+                sign_up_admin(conn)
+            # After sign up, loop back to main menu automatically
+        
+        elif choice == "2":
+            print("\nLog In Options:")
+            print("1. Patron")
+            print("2. Admin")
+            sub_choice = input("Choose: ")
+            
+            if sub_choice == "1":
+                patron_id = log_in_patron(conn)   # Patron login flow
+                if patron_id:
+                    # proceed to patron dashboard
+                    pass
+            
+            elif sub_choice == "2":
+                admin_id = log_in_admin(conn)     # Admin login flow
+                if admin_id:
+                    # proceed to admin dashboard
+                    pass
+
+main()
