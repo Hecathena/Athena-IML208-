@@ -1,0 +1,111 @@
+from flask import Flask, render_template, request, redirect, url_for, session, flash
+import sqlite3
+import random
+
+app = Flask(__name__)
+app.secret_key = "athena_secret_key" # Required for sessions
+
+DATABASE = "athena.db"
+
+def get_db():
+    conn = sqlite3.connect(DATABASE)
+    return conn
+
+# --- ORIGINAL LOGIC FUNCTIONS PRESERVED ---
+def generate_patron_id(surname, dob):
+    prefix = surname[:3].upper()
+    parts = dob.split("-")
+    if len(parts) != 3: return "INV" + str(random.randint(100, 999))
+    year, month, day = parts
+    suffix = year[-2:] + month + day
+    return prefix + suffix
+
+def generate_admin_id():
+    return "ATH" + str(random.randint(100000, 999999))
+
+# --- ROUTES ---
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/signup', methods=['GET', 'POST'])
+def signup():
+    if request.method == 'POST':
+        role = request.form.get('role')
+        surname = request.form.get('surname')
+        firstname = request.form.get('firstname')
+        dob = request.form.get('dob')
+        phone = request.form.get('phone')
+        password = request.form.get('password')
+        
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        if role == 'patron':
+            user_id = generate_patron_id(surname, dob)
+            cursor.execute("INSERT INTO athena_patron (surname, firstname, dob, phone, patron_id, password) VALUES (?, ?, ?, ?, ?, ?)",
+                           (surname, firstname, dob, phone, user_id, password))
+        else:
+            user_id = generate_admin_id()
+            cursor.execute("INSERT INTO athena_admin (surname, firstname, dob, phone, admin_id, password) VALUES (?, ?, ?, ?, ?, ?)",
+                           (surname, firstname, dob, phone, user_id, password))
+        
+        conn.commit()
+        conn.close()
+        flash(f"Account created! Your ID is {user_id}")
+        return redirect(url_for('login'))
+    
+    return render_template('signup.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        user_id = request.form.get('user_id')
+        password = request.form.get('password')
+        role = request.form.get('role')
+        
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        if role == 'patron':
+            cursor.execute("SELECT * FROM athena_patron WHERE patron_id=? AND password=?", (user_id, password))
+        else:
+            cursor.execute("SELECT * FROM athena_admin WHERE admin_id=? AND password=?", (user_id, password))
+            
+        user = cursor.fetchone()
+        conn.close()
+        
+        if user:
+            session['user_id'] = user_id
+            session['role'] = role
+            return redirect(url_for('dashboard_view'))
+        else:
+            flash("Invalid credentials!")
+            
+    return render_template('login.html')
+
+@app.route('/dashboard')
+def dashboard_view():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+        
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM athena_patron")
+    total_patrons = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM athena_admin")
+    total_admins = cursor.fetchone()[0]
+    conn.close()
+    
+    return render_template('dashboard.html', total_patrons=total_patrons, total_admins=total_admins)
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('index'))
+
+if __name__ == '__main__':
+    # Initialize DB (simulating your create_tables function)
+    # create_tables() 
+    app.run(debug=True)
