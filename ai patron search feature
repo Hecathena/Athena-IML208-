@@ -1,0 +1,28 @@
+def search_patron_by_id(conn, patron_id):
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM athena_patron WHERE patron_id=?", (patron_id,))
+    patron = cursor.fetchone()
+    if patron:
+        print("\n--- Patron Profile ---")
+        print(f"Surname: {patron[1]}")
+        print(f"Firstname: {patron[2]}")
+        print(f"DOB: {patron[3]}")
+        print(f"Phone: {patron[4]}")
+        print(f"Patron ID: {patron[5]}")
+    else:
+        print("No patron found with that ID.")
+#elif choice 9
+elif choice == "9":
+    patron_id = input("Enter Patron ID to search: ")
+    search_patron_by_id(conn, patron_id)
+#New Homepage
+print("\n--- Admin Homepage ---")
+print("1. Create Patron")
+print("2. Read Patron")
+print("3. Update Patron")
+print("4. Delete Patron")
+print("5. Read Profile")
+print("6. Update Profile")
+print("7. Statistics on Patron Visits Daily")
+print("8. Log Out of Athena")
+print("9. Search Patron by ID")
