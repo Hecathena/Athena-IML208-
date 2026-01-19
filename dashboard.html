@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dashboard - Athena</title>
+</head>
+<body>
+    <h1>System Dashboard</h1>
+    <div style="display: flex; gap: 20px;">
+        <div style="border: 1px solid #ccc; padding: 20px;">
+            <h3>Total Patrons</h3>
+            <p>{{ total_patrons }}</p>
+        </div>
+        <div style="border: 1px solid #ccc; padding: 20px;">
+            <h3>Total Admins</h3>
+            <p>{{ total_admins }}</p>
+        </div>
+    </div>
+    <hr>
+    <p>Logged in as: {{ session['user_id'] }} ({{ session['role'] }})</p>
+    <a href="/logout">Log Out</a>
+</body>
+</html>
