@@ -5,7 +5,7 @@ def create_tables():
     conn = sqlite3.connect("athena.db")
     cursor = conn.cursor()
     
-    # Create athena_patron table (without created_at column)
+    # Create athena_patron table
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS athena_patron (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
