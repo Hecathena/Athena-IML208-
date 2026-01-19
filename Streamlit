@@ -1,0 +1,180 @@
+import streamlit as st
+import sqlite3
+import random
+import pandas as pd
+from datetime import datetime
+
+# --- DATABASE CONNECTION (Preserving your existing file) ---
+def get_db_connection():
+    return sqlite3.connect("athena.db", check_same_thread=False)
+
+# --- YOUR ORIGINAL FUNCTIONS (Preserved Logic) ---
+def generate_patron_id(surname, dob):
+    prefix = surname[:3].upper()
+    try:
+        year, month, day = str(dob).split("-")
+        suffix = year[-2:] + month + day
+        return prefix + suffix
+    except:
+        return prefix + "000000"
+
+def generate_admin_id():
+    return "ATH" + str(random.randint(100000, 999999))
+
+# --- STREAMLIT UI SETUP ---
+st.set_page_config(page_title="Athena Library System", layout="centered")
+
+# Initialize Session State to track logins
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+    st.session_state.user_role = None
+    st.session_state.user_id = None
+
+# --- SIDEBAR NAVIGATION ---
+st.sidebar.title("🏛️ Athena System")
+
+if st.session_state.logged_in:
+    st.sidebar.write(f"**Logged in as:** {st.session_state.user_role}")
+    st.sidebar.write(f"**ID:** {st.session_state.user_id}")
+    if st.sidebar.button("Log Out"):
+        st.session_state.logged_in = False
+        st.rerun()
+else:
+    menu_choice = st.sidebar.radio("Main Menu", ["Login", "Sign Up"])
+
+# --- SIGN UP LOGIC ---
+if not st.session_state.logged_in and menu_choice == "Sign Up":
+    st.header("Sign Up")
+    role = st.selectbox("Register as", ["Patron", "Admin"])
+    
+    with st.form("signup_form"):
+        surname = st.text_input("Surname")
+        firstname = st.text_input("First Name")
+        dob = st.date_input("Date of Birth")
+        phone = st.text_input("Phone Number")
+        password = st.text_input("Password", type="password")
+        confirm = st.text_input("Confirm Password", type="password")
+        
+        if st.form_submit_button("Create Account"):
+            if password != confirm:
+                st.error("Passwords do not match.")
+            else:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                if role == "Patron":
+                    new_id = generate_patron_id(surname, str(dob))
+                    cursor.execute("INSERT INTO athena_patron (surname, firstname, dob, phone, patron_id, password) VALUES (?,?,?,?,?,?)",
+                                   (surname, firstname, str(dob), phone, new_id, password))
+                else:
+                    new_id = generate_admin_id()
+                    cursor.execute("INSERT INTO athena_admin (surname, firstname, dob, phone, admin_id, password) VALUES (?,?,?,?,?,?)",
+                                   (surname, firstname, str(dob), phone, new_id, password))
+                conn.commit()
+                conn.close()
+                st.success(f"Account created! Your ID is: {new_id}")
+
+# --- LOGIN LOGIC ---
+elif not st.session_state.logged_in and menu_choice == "Login":
+    st.header("Login")
+    login_role = st.radio("Login as", ["Patron", "Admin"], horizontal=True)
+    l_id = st.text_input("Enter ID")
+    l_pwd = st.text_input("Enter Password", type="password")
+    
+    if st.button("Login"):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        table = "athena_patron" if login_role == "Patron" else "athena_admin"
+        id_col = "patron_id" if login_role == "Patron" else "admin_id"
+        
+        cursor.execute(f"SELECT * FROM {table} WHERE {id_col}=? AND password=?", (l_id, l_pwd))
+        user = cursor.fetchone()
+        conn.close()
+        
+        if user:
+            st.session_state.logged_in = True
+            st.session_state.user_role = login_role
+            st.session_state.user_id = l_id
+            st.rerun()
+        else:
+            st.error("User does not exist or wrong password.")
+
+# --- PATRON HOMEPAGE ---
+elif st.session_state.logged_in and st.session_state.user_role == "Patron":
+    st.title("Patron Homepage")
+    choice = st.selectbox("Choose Action", ["Read Profile", "Check In/Out", "View Visit History"])
+    conn = get_db_connection()
+    
+    if choice == "Read Profile":
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM athena_patron WHERE patron_id=?", (st.session_state.user_id,))
+        profile = cursor.fetchone()
+        if profile:
+            st.write(f"**Surname:** {profile[1]}")
+            st.write(f"**Firstname:** {profile[2]}")
+            st.write(f"**DOB:** {profile[3]}")
+            st.write(f"**Phone:** {profile[4]}")
+            st.write(f"**Patron ID:** {profile[5]}")
+
+    elif choice == "Check In/Out":
+        col1, col2 = st.columns(2)
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        if col1.button("Check In Library"):
+            conn.execute("INSERT INTO athena_visits (patron_id, check_in) VALUES (?, ?)", (st.session_state.user_id, now))
+            conn.commit()
+            st.success(f"Check-in recorded at {now}")
+        if col2.button("Check Out Library"):
+            conn.execute("UPDATE athena_visits SET check_out=? WHERE patron_id=? AND check_out IS NULL", (now, st.session_state.user_id))
+            conn.commit()
+            st.success(f"Check-out recorded at {now}")
+
+    elif choice == "View Visit History":
+        history = pd.read_sql(f"SELECT check_in, check_out FROM athena_visits WHERE patron_id='{st.session_state.user_id}'", conn)
+        st.dataframe(history)
+
+# --- ADMIN HOMEPAGE ---
+elif st.session_state.logged_in and st.session_state.user_role == "Admin":
+    st.title("Admin Dashboard")
+    
+    # Quick Statistics (Your original Dashboard Logic)
+    conn = get_db_connection()
+    total_p = pd.read_sql("SELECT COUNT(*) FROM athena_patron", conn).iloc[0,0]
+    total_v = pd.read_sql("SELECT COUNT(*) FROM athena_visits", conn).iloc[0,0]
+    
+    st.metric("Total Patrons", total_p)
+    st.metric("Total Visits", total_v)
+    
+    admin_action = st.selectbox("Admin Menu", ["Create Patron", "Read/Update Patron", "Delete Patron", "Visit Statistics"])
+    
+    if admin_action == "Create Patron":
+        st.info("Use the 'Sign Up' page in the sidebar or a custom form here.")
+        
+    elif admin_action == "Read/Update Patron":
+        target_id = st.text_input("Enter Patron ID")
+        if target_id:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM athena_patron WHERE patron_id=?", (target_id,))
+            p = cursor.fetchone()
+            if p:
+                st.write(p)
+                new_phone = st.text_input("Update Phone Number")
+                if st.button("Update"):
+                    cursor.execute("UPDATE athena_patron SET phone=? WHERE patron_id=?", (new_phone, target_id))
+                    conn.commit()
+                    st.success("Updated!")
+            else: st.error("Not found")
+
+    elif admin_action == "Delete Patron":
+        del_id = st.text_input("ID to Delete")
+        if st.button("Permanently Delete", type="primary"):
+            conn.execute("DELETE FROM athena_patron WHERE patron_id=?", (del_id,))
+            conn.commit()
+            st.warning("Patron deleted.")
+
+    elif admin_action == "Visit Statistics":
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM athena_visits")
+        total_visits = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(DISTINCT DATE(check_in)) FROM athena_visits WHERE check_in IS NOT NULL")
+        total_days = cursor.fetchone()[0]
+        avg = total_visits / total_days if total_days > 0 else 0
+        st.write(f"### Average Daily Visits: {avg:.2f}")
