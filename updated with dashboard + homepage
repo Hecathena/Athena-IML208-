@@ -30,6 +30,17 @@ def create_tables():
         password TEXT
     );
     """)
+
+#create library visits table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS athena_visits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        patron_id TEXT,
+        check_in TEXT,
+        check_out TEXT,
+        FOREIGN KEY (patron_id) REFERENCES athena_patron(patron_id)
+    );
+    """)
     
     conn.commit()
     conn.close()
@@ -152,6 +163,7 @@ def patron_homepage(conn, patron_id):
         cursor = conn.cursor()
         
         if choice == "1":
+            patron_id = input("Enter Patron ID: ")
             cursor.execute("SELECT * FROM athena_patron WHERE patron_id=?", (patron_id,))
             profile = cursor.fetchone()
             if profile:   # check before indexing
@@ -245,6 +257,10 @@ def admin_homepage(conn, admin_id):
             elif sub_choice == "d":
                 new_val = input("Enter new phone: ")
                 cursor.execute("UPDATE athena_patron SET phone=? WHERE patron_id=?", (new_val, patron_id))
+
+            else:
+                print("Invalid choice.")
+                continue
             conn.commit()
             print("Patron updated successfully.")
         
@@ -252,17 +268,24 @@ def admin_homepage(conn, admin_id):
             patron_id = input("Enter Patron ID to delete: ")
             cursor.execute("DELETE FROM athena_patron WHERE patron_id=?", (patron_id,))
             conn.commit()
+            if cursor.rowcount == 0:
+                print("Patron not found.")
+                return
             print("Patron deleted successfully.")
         
         elif choice == "5":
+            admin_id = input("Enter Admin ID: ")
             cursor.execute("SELECT * FROM athena_admin WHERE admin_id=?", (admin_id,))
             profile = cursor.fetchone()
-            print("\n--- Admin Profile ---")
-            print(f"Surname: {profile[1]}")
-            print(f"Firstname: {profile[2]}")
-            print(f"DOB: {profile[3]}")
-            print(f"Phone: {profile[4]}")
-            print(f"Admin ID: {profile[5]}")
+            if profile:
+                print("\n--- Admin Profile ---")
+                print(f"Surname: {profile[1]}")
+                print(f"Firstname: {profile[2]}")
+                print(f"DOB: {profile[3]}")
+                print(f"Phone: {profile[4]}")
+                print(f"Admin ID: {profile[5]}")
+            else:
+                print("Admin not found.")
         
         elif choice == "6":
             print("\nUpdate Options:")
@@ -284,6 +307,9 @@ def admin_homepage(conn, admin_id):
             elif sub_choice == "d":
                 new_val = input("Enter new phone: ")
                 cursor.execute("UPDATE athena_admin SET phone=? WHERE admin_id=?", (new_val, admin_id))
+            else:
+                print("Invalid choice.")
+                continue
             conn.commit()
             print("Admin profile updated successfully.")
         
@@ -300,6 +326,7 @@ def admin_homepage(conn, admin_id):
             break
         else:
             print("Invalid choice.")
+
 # ---------------- MAIN PROGRAM ----------------
 def main():
     conn = sqlite3.connect("athena.db")
