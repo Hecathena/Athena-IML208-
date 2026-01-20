@@ -387,4 +387,4 @@ def main():
     conn.close()
 
 main()
-print("Exiting Athena. Goodbye!"
+print("Exiting Athena. Goodbye!")
