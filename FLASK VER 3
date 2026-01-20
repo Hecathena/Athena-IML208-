@@ -113,6 +113,25 @@ def attendance():
     conn.close()
     return render_template("attendance.html")
 
+# --- READ (Profile) ---
+@app.route("/profile")
+def view_profile():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    conn = get_db_connection()
+    user = conn.execute(
+        "SELECT * FROM users WHERE id = ?",
+        (session["user_id"],)
+    ).fetchone()
+    conn.close()
+
+    if not user:
+        flash("User profile not found.")
+        return redirect(url_for("dashboard"))
+
+    return render_template("profile.html", user=user)
+
 # --- UPDATE ---
 @app.route("/edit_profile", methods=["GET", "POST"])
 def edit_profile():
@@ -123,11 +142,10 @@ def edit_profile():
     
     if request.method == "POST":
         new_phone = request.form["phone"]
-        new_firstname = request.form["firstname"]
         
         conn.execute(
-            "UPDATE users SET phone = ?, firstname = ? WHERE id = ?",
-            (new_phone, new_firstname, session["user_id"])
+            "UPDATE users SET phone = ? WHERE id = ?",
+            (new_phone, session["user_id"])
         )
         conn.commit()
         conn.close()
