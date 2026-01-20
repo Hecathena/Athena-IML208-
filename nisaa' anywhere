@@ -1,0 +1,390 @@
+import sqlite3
+import random
+import os
+from datetime import datetime
+
+conn = sqlite3.connect("anywhere.db")
+cursor = conn.cursor()
+
+# Create tables only if they don't exist
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS patron (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        surname TEXT,
+        firstname TEXT,
+        dob TEXT,
+        phone TEXT,
+        patron_id TEXT UNIQUE,
+        password TEXT
+    );
+    """)
+
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS admin (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        surname TEXT,
+        firstname TEXT,
+        dob TEXT,
+        phone TEXT,
+        admin_id TEXT UNIQUE,
+        password TEXT
+    );
+    """)
+
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS visits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        patron_id TEXT,
+        admin_id TEXT,
+        check_in TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        check_out TIMESTAMP,
+        FOREIGN KEY (patron_id) REFERENCES patron(patron_id),
+        FOREIGN KEY (admin_id) REFERENCES admin(admin_id)
+    );
+    """)
+
+conn.commit()
+conn.close()
+print("Database initialized.")
+
+
+def generate_patron_id(surname, dob):
+    prefix = surname[:3].upper()
+    year, month, day = dob.split("-")
+    suffix = year[-2:] + month + day
+    return prefix + suffix
+
+def sign_up_patron(conn):
+    surname = input("Enter surname: ")
+    firstname = input("Enter first name: ")
+    dob = input("Enter DOB (YYYY-MM-DD): ")
+    phone = input("Enter phone number: ")
+    
+    password = input("Set your password: ")
+    confirm = input("Confirm your password: ")
+    if password != confirm:
+        print("Passwords do not match. Try again.")
+        return
+    
+    patron_id = generate_patron_id(surname, dob)
+    cursor = conn.cursor()
+    cursor.execute("""INSERT INTO patron 
+        (surname, firstname, dob, phone, patron_id, password) 
+        VALUES (?, ?, ?, ?, ?, ?)""", 
+        (surname, firstname, dob, phone, patron_id, password))
+    conn.commit()
+    
+    print(f"Account successfully created. Your Card ID is {patron_id}")
+
+def generate_admin_id():
+    # Generate random 6-digit number, ensure uniqueness
+    return "ATH" + str(random.randint(100000, 999999))
+
+def sign_up_admin(conn):
+    surname = input("Enter surname: ")
+    firstname = input("Enter first name: ")
+    dob = input("Enter DOB (YYYY-MM-DD): ")
+    phone = input("Enter phone number: ")
+    
+    password = input("Set your password: ")
+    confirm = input("Confirm your password: ")
+    if password != confirm:
+        print("Passwords do not match. Try again.")
+        return
+    
+    admin_id = generate_admin_id()
+    cursor = conn.cursor()
+    cursor.execute("""INSERT INTO admin 
+        (surname, firstname, dob, phone, admin_id, password) 
+        VALUES (?, ?, ?, ?, ?, ?)""", 
+        (surname, firstname, dob, phone, admin_id, password))
+    conn.commit()
+    
+    print(f"Account successfully created. Your Card ID is {admin_id}")
+
+def log_in_patron(conn):
+    patron_id = input("Enter Patron ID: ")
+    password = input("Enter Password: ")
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM patron WHERE patron_id=? AND password=?", (patron_id, password))
+    result = cursor.fetchone()
+    if result:
+        print("Login successful as Patron!")
+        return result[0]
+    else:
+        print("Sorry! User does not exist. Please sign up.")
+        return None
+    
+def log_in_admin(conn):
+    admin_id = input("Enter Admin ID: ")
+    password = input("Enter Password: ")
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM admin WHERE admin_id=? AND password=?", (admin_id, password))
+    result = cursor.fetchone()
+    if result:
+        print("Login successful as Admin!")
+        return result[0]
+    else:
+        print("Sorry! Admin does not exist. Please sign up.")
+        return None
+
+# ---------------- NEW DASHBOARD FUNCTION ----------------
+def dashboard(conn):
+    cursor = conn.cursor()
+    
+    # Count patrons
+    cursor.execute("SELECT COUNT(*) FROM patron")
+    total_patrons = cursor.fetchone()[0]
+    
+    # Count admins
+    cursor.execute("SELECT COUNT(*) FROM admin")
+    total_admins = cursor.fetchone()[0]
+    
+    # Simulated average daily visits (replace with real tracking later)[TO BE MODIFIED LATER]
+    avg_daily_visits = total_patrons if total_patrons > 0 else 0
+    
+    print("\n--- Dashboard ---")
+    print(f"Total Patrons Registered: {total_patrons}")
+    print(f"Total Admins Registered: {total_admins}")
+    print(f"Average Patron Visits Daily: {avg_daily_visits}")
+
+# ---------------- HOMEPAGE ----------------
+def patron_homepage(conn, patron_id):
+    while True:
+        print("\n--- Patron Homepage ---")
+        print("1. Read Profile")
+        print("2. Check In Library")
+        print("3. Check Out Library")
+        print("4. View Visit History")
+        print("5. Log Out of Athena")
+        choice = input("Choose: ")
+        
+        cursor = conn.cursor()
+        
+        if choice == "1":
+            patron_id = input("Enter Patron ID: ")
+            cursor.execute("SELECT * FROM patron WHERE patron_id=?", (patron_id,))
+            profile = cursor.fetchone()
+            if profile:   # check before indexing
+                print("\n--- Profile ---")
+                print(f"Surname: {profile[1]}")
+                print(f"Firstname: {profile[2]}")
+                print(f"DOB: {profile[3]}")
+                print(f"Phone: {profile[4]}")
+                print(f"Patron ID: {profile[5]}")
+            else:
+                print("Profile not found.")
+        
+
+        elif choice == "2":
+             # Automatically capture current timestamp for check-in
+            check_in = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cursor.execute("INSERT INTO visits (patron_id, check_in) VALUES (?, ?)", (patron_id, check_in))
+            conn.commit()
+            print("Check-in recorded at", check_in)
+
+        elif choice == "3":
+            # Automatically capture current timestamp for check-out
+            check_out = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cursor.execute("UPDATE visits SET check_out=? WHERE patron_id=? AND check_out IS NULL", (check_out, patron_id))
+            conn.commit()
+            print("Check-out recorded at", check_out)
+
+        
+        elif choice == "4":
+            cursor.execute("SELECT check_in, check_out FROM visits WHERE patron_id=?", (patron_id,))
+            visits = cursor.fetchall()
+            print("\n--- Visit History ---")
+            for v in visits:
+                print(f"Check-in: {v[0]} | Check-out: {v[1]}")
+        
+        elif choice == "5":
+            print("Logging out of Athena...")
+            break
+#--- admin homepage ---
+def admin_homepage(conn, admin_id):
+    while True:
+        print("\n--- Admin Homepage ---")
+        print("1. Check In Library")
+        print("2. Check Out Library")
+        print("3. Create Patron")
+        print("4. Read Patron")
+        print("5. Update Patron")
+        print("6. Delete Patron")
+        print("7. Read Profile")
+        print("8. Update Profile")
+        print("9. Statistics on Patron Visits Daily")
+        print("10. Log Out of Athena")
+        choice = input("Choose: ")
+        
+        cursor = conn.cursor()
+
+
+        
+        if choice == "1":
+             # Automatically capture current timestamp for check-in
+            check_in = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cursor.execute("INSERT INTO visits (admin_id, check_in) VALUES (?, ?)", (admin_id, check_in))
+            conn.commit()
+            print("Check-in recorded at", check_in)
+
+        elif choice == "2":
+            # Automatically capture current timestamp for check-out
+            check_out = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cursor.execute("UPDATE visits SET check_out=? WHERE admin_id=? AND check_out IS NULL", (check_out, admin_id))
+            conn.commit()
+            print("Check-out recorded at", check_out)
+
+        elif choice == "3":
+            # Create patron using existing function
+            sign_up_patron(conn)
+        
+        elif choice == "4":
+            patron_id = input("Enter Patron ID to read: ")
+            cursor.execute("SELECT * FROM patron WHERE patron_id=?", (patron_id,))
+            patron = cursor.fetchone()
+            if patron:
+                print("\n--- Patron Profile ---")
+                print(f"Surname: {patron[1]}")
+                print(f"Firstname: {patron[2]}")
+                print(f"DOB: {patron[3]}")
+                print(f"Phone: {patron[4]}")
+                print(f"Patron ID: {patron[5]}")
+            else:
+                print("Patron not found.")
+        
+        elif choice == "5":
+            patron_id = input("Enter Patron ID to update: ")
+            print("\nUpdate Options:")
+            print("a. Surname")
+            print("b. Firstname")
+            print("c. DOB")
+            print("d. Phone")
+            sub_choice = input("Choose: ")
+            
+            if sub_choice == "a":
+                new_val = input("Enter new surname: ")
+                cursor.execute("UPDATE patron SET surname=? WHERE patron_id=?", (new_val, patron_id))
+            elif sub_choice == "b":
+                new_val = input("Enter new firstname: ")
+                cursor.execute("UPDATE patron SET firstname=? WHERE patron_id=?", (new_val, patron_id))
+            elif sub_choice == "c":
+                new_val = input("Enter new DOB (YYYY-MM-DD): ")
+                cursor.execute("UPDATE patron SET dob=? WHERE patron_id=?", (new_val, patron_id))
+            elif sub_choice == "d":
+                new_val = input("Enter new phone: ")
+                cursor.execute("UPDATE patron SET phone=? WHERE patron_id=?", (new_val, patron_id))
+
+            else:
+                print("Invalid choice.")
+                continue
+            conn.commit()
+            print("Patron updated successfully.")
+        
+        elif choice == "6":
+            patron_id = input("Enter Patron ID to delete: ")
+            cursor.execute("DELETE FROM patron WHERE patron_id=?", (patron_id,))
+            conn.commit()
+            if cursor.rowcount == 0:
+                print("Patron not found.")
+                return
+            print("Patron deleted successfully.")
+        
+        elif choice == "7":
+            admin_id = input("Enter Admin ID: ")
+            cursor.execute("SELECT * FROM admin WHERE admin_id=?", (admin_id,))
+            profile = cursor.fetchone()
+            if profile:
+                print("\n--- Admin Profile ---")
+                print(f"Surname: {profile[1]}")
+                print(f"Firstname: {profile[2]}")
+                print(f"DOB: {profile[3]}")
+                print(f"Phone: {profile[4]}")
+                print(f"Admin ID: {profile[5]}")
+            else:
+                print("Admin not found.")
+        
+        elif choice == "8":
+            print("\nUpdate Options:")
+            print("a. Surname")
+            print("b. Firstname")
+            print("c. DOB")
+            print("d. Phone")
+            sub_choice = input("Choose: ")
+            
+            if sub_choice == "a":
+                new_val = input("Enter new surname: ")
+                cursor.execute("UPDATE admin SET surname=? WHERE admin_id=?", (new_val, admin_id))
+            elif sub_choice == "b":
+                new_val = input("Enter new firstname: ")
+                cursor.execute("UPDATE admin SET firstname=? WHERE admin_id=?", (new_val, admin_id))
+            elif sub_choice == "c":
+                new_val = input("Enter new DOB (YYYY-MM-DD): ")
+                cursor.execute("UPDATE admin SET dob=? WHERE admin_id=?", (new_val, admin_id))
+            elif sub_choice == "d":
+                new_val = input("Enter new phone: ")
+                cursor.execute("UPDATE admin SET phone=? WHERE admin_id=?", (new_val, admin_id))
+            else:
+                print("Invalid choice.")
+                continue
+            conn.commit()
+            print("Admin profile updated successfully.")
+        
+        elif choice == "9":
+            cursor.execute("SELECT COUNT(*) FROM visits")
+            total_visits = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(DISTINCT DATE(check_in)) FROM visits WHERE check_in IS NOT NULL")
+            total_days = cursor.fetchone()[0]
+            avg_daily_visits = total_visits / total_days if total_days > 0 else 0
+            print(f"Average Patron Visits Daily: {avg_daily_visits:.2f}")
+        
+        elif choice == "10":
+            print("Logging out of Athena...")
+            break
+        else:
+            print("Invalid choice.")
+
+# ---------------- MAIN PROGRAM ----------------
+def main():
+    conn = sqlite3.connect("anywhere.db")
+    while True:
+        print("\n--- Main Menu ---")
+        print("1. Sign Up")
+        print("2. Log In")
+        print("3. Exit")
+        choice = input("Choose: ")
+        
+        if choice == "1":
+            print("\nSign Up Options:")
+            print("1. Patron")
+            print("2. Admin")
+            sub_choice = input("Choose: ")
+            if sub_choice == "1":
+                sign_up_patron(conn)
+            elif sub_choice == "2":
+                sign_up_admin(conn)
+        
+        elif choice == "2":
+            print("\nLog In Options:")
+            print("1. Patron")
+            print("2. Admin")
+            sub_choice = input("Choose: ")
+            
+            if sub_choice == "1":
+                patron_id = log_in_patron(conn)
+                if patron_id:
+                    dashboard(conn)
+                    patron_homepage(conn, patron_id)
+            elif sub_choice == "2":
+                admin_id = log_in_admin(conn)
+                if admin_id:
+                    dashboard(conn)
+                    admin_homepage(conn, admin_id)
+        
+        elif choice == "3":
+            break
+    
+    conn.close()
+
+main()
+print("Exiting Athena. Goodbye!"
