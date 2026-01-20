@@ -77,6 +77,33 @@ def record_attendance():
         print(f"Attendance recorded at {now_time}.")
     conn.close()
 
+def view_profile(user_id):
+    if not user_id:
+        return "No user logged in. Please log in first."
+
+    conn = get_db_connection()
+    user = conn.execute(
+        "SELECT * FROM users WHERE id = ?",
+        (user_id,)
+    ).fetchone()
+    conn.close()
+
+    if not user:
+        return "User profile not found."
+
+    profile = {
+        "First Name": user["firstname"],
+        "Surname": user["surname"],
+        "Date of Birth": user["dob"],
+        "Phone": user["phone"],
+        "Role": user["role"]
+    }
+    return profile
+
+user_id = 1
+result = view_profile(user_id)
+print(result)
+
 # --- UPDATE (Edit Profile) ---
 def edit_profile():
     print("\n--- Edit Profile ---")
