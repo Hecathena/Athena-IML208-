@@ -1,0 +1,136 @@
+import sqlite3
+from datetime import date, datetime
+
+# Global variable to track the logged-in user
+current_user = None
+
+def get_db_connection():
+    conn = sqlite3.connect("database.db")
+    conn.row_factory = sqlite3.Row
+    return conn
+
+# --- CREATE (Signup) ---
+def signup():
+    print("\n--- Signup ---")
+    role = input("Enter role (patron/admin): ").lower()
+    firstname = input("First Name: ")
+    surname = input("Surname: ")
+    dob = input("Date of Birth (YYYY-MM-DD): ")
+    phone = input("Phone: ")
+    password = input("Password: ")
+
+    conn = get_db_connection()
+    try:
+        conn.execute("""
+            INSERT INTO users (role, firstname, surname, dob, phone, password)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (role, firstname, surname, dob, phone, password))
+        conn.commit()
+        print("Account created successfully!")
+    except Exception as e:
+        print(f"Error: {e}")
+    finally:
+        conn.close()
+
+# --- READ (Login) ---
+def login():
+    global current_user
+    print("\n--- Login ---")
+    user_id = input("User ID: ")
+    role = input("Role: ")
+    password = input("Password: ")
+
+    conn = get_db_connection()
+    user = conn.execute(
+        "SELECT * FROM users WHERE id = ? AND role = ? AND password = ?",
+        (user_id, role, password)
+    )
+    current_user = user.fetchone()
+    conn.close()
+
+    if current_user:
+        print(f"Welcome back, {current_user['firstname']}!")
+        return True
+    else:
+        print("Invalid login details.")
+        return False
+
+# --- CREATE (Attendance) ---
+def record_attendance():
+    today = date.today().isoformat()
+    now_time = datetime.now().strftime("%H:%M:%S")
+    
+    conn = get_db_connection()
+    existing = conn.execute(
+        "SELECT * FROM attendance WHERE user_id = ? AND date = ?",
+        (current_user["id"], today)
+    ).fetchone()
+
+    if existing:
+        print("Attendance already recorded for today.")
+    else:
+        conn.execute(
+            "INSERT INTO attendance (user_id, date, time) VALUES (?, ?, ?)",
+            (current_user["id"], today, now_time)
+        )
+        conn.commit()
+        print(f"Attendance recorded at {now_time}.")
+    conn.close()
+
+# --- UPDATE (Edit Profile) ---
+def edit_profile():
+    print("\n--- Edit Profile ---")
+    new_phone = input(f"Enter new phone (Current: {current_user['phone']}): ")
+    
+    conn = get_db_connection()
+    conn.execute(
+        "UPDATE users SET phone = ? WHERE id = ?",
+        (new_phone, current_user["id"])
+    )
+    conn.commit()
+    conn.close()
+    print("Profile updated successfully!")
+
+# --- DELETE (Delete Account) ---
+def delete_account():
+    confirm = input("Are you sure you want to delete your account? (yes/no): ")
+    if confirm.lower() == 'yes':
+        conn = get_db_connection()
+        # Delete attendance first (FK safety)
+        conn.execute("DELETE FROM attendance WHERE user_id = ?", (current_user["id"],))
+        # Delete user
+        conn.execute("DELETE FROM users WHERE id = ?", (current_user["id"],))
+        conn.commit()
+        conn.close()
+        print("Account deleted.")
+        return True # Trigger logout
+    return False
+
+# --- MAIN MENU LOGIC ---
+def main():
+    while True:
+        if not current_user:
+            print("\n1. Signup\n2. Login\n3. Exit")
+            choice = input("Select an option: ")
+            if choice == '1': signup()
+            elif choice == '2': login()
+            elif choice == '3': break
+        else:
+            print(f"\n--- {current_user['role'].upper()} DASHBOARD ---")
+            print("1. Record Attendance")
+            print("2. Edit Profile")
+            print("3. Delete Account")
+            print("4. Logout")
+            
+            choice = input("Select an option: ")
+            if choice == '1': record_attendance()
+            elif choice == '2': edit_profile()
+            elif choice == '3': 
+                if delete_account(): 
+                    globals()['current_user'] = None
+            elif choice == '4': 
+                globals()['current_user'] = None
+                print("Logged out.")
+
+if __name__ == "__main__":
+    main()
